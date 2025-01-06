@@ -2,9 +2,10 @@
 #![allow(dead_code)] // TODO(you): remove this lint after implementing this mod
 
 use std::cmp::{self};
+use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
 
-use anyhow::Result;
+use anyhow::{Error, Ok, Result};
 
 use crate::key::KeySlice;
 
@@ -55,18 +56,50 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
     type KeyType<'a> = KeySlice<'a>;
 
     fn key(&self) -> KeySlice {
-        unimplemented!()
+        match self.current.as_ref() {
+            Some(x) => x.1.key(),
+            None => KeySlice::from_slice(&[]),
+        }
     }
 
     fn value(&self) -> &[u8] {
-        unimplemented!()
+        match self.current.as_ref() {
+            Some(x) => x.1.value(),
+            None => &[],
+        }
     }
 
     fn is_valid(&self) -> bool {
-        unimplemented!()
+        match self.current.as_ref() {
+            Some(x) => x.1.is_valid(),
+            None => false,
+        }
     }
 
     fn next(&mut self) -> Result<()> {
-        unimplemented!()
+        let current = self.current.as_mut().unwrap();
+        while let Some(mut inner) = self.iters.peek_mut() {
+            if current.1.key() == inner.1.key() {
+                let e = inner.1.next();
+                if let e @ Err(_) = e {
+                    PeekMut::pop(inner);
+                    return e;
+                }
+                if !inner.1.is_valid() {
+                    PeekMut::pop(inner);
+                }
+            }
+        }
+        current.1.next()?;
+        if !current.1.is_valid() {
+            *current = self.iters.pop().unwrap();
+        }
+
+        if let Some(mut x) = self.iters.peek_mut() {
+            if *current < *x {
+                std::mem::swap(&mut *x, current);
+            }
+        }
+        Ok(())
     }
 }
